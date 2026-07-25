@@ -5,7 +5,7 @@
  * Watches the Growatt battery panel LEDs. When the battery shuts off
  * (RUN off AND SOC off), the servo presses the power button once and
  * verifies the battery came back. Alerts go to your server as:
- *   GET https://brass.trymassive.ai/inverter?event=<code>&message=<text>
+ *   GET https://vast-comet-94.webhook.cool/?event=<code>&message=<text>
  *
  * Board: ESP32 Dev Module | Library: ESP32Servo
  *
@@ -28,8 +28,7 @@
 // ---------- WiFi + alerts ----------
 const char* WIFI_SSID = "YOUR_WIFI_NAME";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-const char* ALERT_HOST = "brass.trymassive.ai";
-const char* ALERT_PATH = "/inverter";
+const char* ALERT_HOST = "vast-comet-94.webhook.cool"; // GET /?event=..&message=..
 
 // ---------- Pins (ADC1 only: 32-39 work with WiFi on) ----------
 const int PIN_RUN = 34;
@@ -53,7 +52,7 @@ const unsigned long PRESS_HOLD_MS = 600;
 
 // ---------- Timing & safety ----------
 const unsigned long CHECK_INTERVAL_MS = 2000;
-const int STABLE_CHECKS_REQUIRED = 8;                          // 8 x 2s = 16s of "all off" before pressing
+const int STABLE_CHECKS_REQUIRED = 8; // 8 x 2s = 16s of "all off" before pressing
 const unsigned long POST_PRESS_WAIT_MS = 45000;
 const int MAX_PRESSES_PER_HOUR = 3;
 const unsigned long FAILED_WAKE_COOLDOWN_MS = 5UL * 60 * 1000;
@@ -79,10 +78,12 @@ bool announcedShutdownPending = false;
 
 int readAvg(int pin) {
   long sum = 0;
+
   for (int i = 0; i < 10; i++) {
     sum += analogRead(pin);
     delay(3);
   }
+
   return sum / 10;
 }
 
@@ -91,42 +92,59 @@ bool ledOn(int pin, int threshold) {
   return LIGHT_IS_LOW ? (v < threshold) : (v > threshold);
 }
 
-String urlEncode(const String& s) {
+void urlEncode(const char* src, char* dst, size_t dstSize) {
   const char* hex = "0123456789ABCDEF";
-  String out = "";
-  for (char c : s) {
-    if (isalnum(c)) {
-      out += c;
+  size_t j = 0;
+
+  for (size_t i = 0; src[i] != '\0' && j + 3 < dstSize; i++) {
+    char c = src[i];
+
+    if (isalnum((unsigned char)c)) {
+      dst[j++] = c;
     } else {
-      out += '%';
-      out += hex[(c >> 4) & 0xF];
-      out += hex[c & 0xF];
+      dst[j++] = '%';
+      dst[j++] = hex[(c >> 4) & 0xF];
+      dst[j++] = hex[c & 0xF];
     }
   }
-  return out;
+
+  dst[j] = '\0';
 }
 
-void sendAlert(const String& event, const String& msg) {
-  Serial.println("[ALERT] " + event + " - " + msg);
+void sendAlert(const char* event, const char* msg) {
+  Serial.printf("[ALERT] %s - %s\n", event, msg);
+
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[ALERT] no wifi, skipped");
     return;
   }
+
   WiFiClientSecure client;
   client.setInsecure();
+
   if (!client.connect(ALERT_HOST, 443)) {
     Serial.println("[ALERT] connect failed");
     return;
   }
-  String url = String(ALERT_PATH) + "?event=" + urlEncode(event) + "&message=" + urlEncode(msg);
-  client.print("GET " + url + " HTTP/1.1\r\nHost: " + ALERT_HOST + "\r\nConnection: close\r\n\r\n");
+
+  char eventEnc[64];
+  char msgEnc[512];
+  urlEncode(event, eventEnc, sizeof(eventEnc));
+  urlEncode(msg, msgEnc, sizeof(msgEnc));
+
+  char request[768];
+  snprintf(request, sizeof(request), "GET /?event=%s&message=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", eventEnc, msgEnc, ALERT_HOST);
+  client.print(request);
+
   unsigned long t = millis();
+
   while (client.connected() && millis() - t < 5000) {
     if (client.available()) {
       client.readStringUntil('\n');
       break;
     }
   }
+
   client.stop();
 }
 
@@ -134,15 +152,19 @@ void ensureWifi() {
   if (WiFi.status() == WL_CONNECTED) {
     return;
   }
+
   Serial.println("[WiFi] connecting...");
   WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
   unsigned long t = millis();
+
   while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
     delay(250);
   }
+
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("[WiFi] connected: " + WiFi.localIP().toString());
+    Serial.printf("[WiFi] connected: %s\n", WiFi.localIP().toString().c_str());
   } else {
     Serial.println("[WiFi] failed, will retry");
   }
@@ -153,6 +175,7 @@ void pressButton() {
   Serial.println("[SERVO] DRY RUN - would press button now");
   return;
 #endif
+
   Serial.println("[SERVO] pressing button");
   servo.attach(PIN_SERVO, 500, 2400);
   servo.write(SERVO_REST_ANGLE);
@@ -169,6 +192,7 @@ bool pressBudgetAvailable() {
     hourWindowStart = millis();
     pressesThisHour = 0;
   }
+
   return pressesThisHour < MAX_PRESSES_PER_HOUR;
 }
 
@@ -192,7 +216,11 @@ void setup() {
   servo.write(SERVO_REST_ANGLE);
 #else
   ensureWifi();
-  sendAlert("started", "Battery watchdog started (" + String(MODE == MODE_DRY_RUN ? "DRY RUN" : "ACTIVE") + " mode)");
+
+  char msg[64];
+  snprintf(msg, sizeof(msg), "Battery watchdog started (%s mode)", MODE == MODE_DRY_RUN ? "DRY RUN" : "ACTIVE");
+  sendAlert("started", msg);
+
   hourWindowStart = millis();
   enterState(MONITORING);
 #endif
@@ -201,22 +229,27 @@ void setup() {
 void loop() {
 #if MODE == MODE_CALIBRATE
   Serial.printf("RUN=%4d  SOC=%4d  ALM=%4d\n", readAvg(PIN_RUN), readAvg(PIN_SOC), readAvg(PIN_ALM));
+
   if (Serial.available()) {
     int angle = Serial.parseInt();
+
     while (Serial.available()) {
       Serial.read();
     }
+
     if (angle >= 0 && angle <= 180) {
       Serial.printf("[SERVO] moving to %d\n", angle);
       servo.write(angle);
     }
   }
+
   delay(500);
 #else
 
   if (millis() - lastCheck < CHECK_INTERVAL_MS) {
     return;
   }
+
   lastCheck = millis();
   ensureWifi();
 
@@ -242,6 +275,7 @@ void loop() {
   if (runOn && !lastRunState && state == MONITORING) {
     sendAlert("run_restored", "Battery RUN light is back on.");
   }
+
   lastRunState = runOn;
 
   switch (state) {
@@ -252,35 +286,46 @@ void loop() {
         announcedShutdownPending = false;
         break;
       }
+
       if (socOn) {
         // RUN off but SOC still lit: shutdown in progress, wait for all off
         allOffStreak = 0;
+
         if (!announcedShutdownPending) {
           sendAlert("shutdown_pending", "Battery RUN light went OFF (SOC lights still on). Waiting for full shutdown before pressing.");
           announcedShutdownPending = true;
         }
+
         break;
       }
+
       allOffStreak++;
+
       if (allOffStreak >= STABLE_CHECKS_REQUIRED) {
         allOffStreak = 0;
         announcedShutdownPending = false;
+
         if (!pressBudgetAvailable()) {
-          sendAlert("locked_out", "Battery is OFF but press limit reached (" + String(MAX_PRESSES_PER_HOUR) + "/hour). LOCKED OUT for safety - please check manually!");
+          char msg[128];
+          snprintf(msg, sizeof(msg), "Battery is OFF but press limit reached (%d/hour). LOCKED OUT for safety - please check manually!", MAX_PRESSES_PER_HOUR);
+          sendAlert("locked_out", msg);
           enterState(LOCKED_OUT);
           break;
         }
+
         sendAlert("pressing", "Battery is fully OFF. Pressing the power button now...");
         pressesThisHour++;
         pressButton();
         enterState(POST_PRESS);
       }
+
       break;
 
     case POST_PRESS:
       if (now - stateEnteredAt < POST_PRESS_WAIT_MS) {
         break;
       }
+
       if (runOn) {
         sendAlert("wake_success", "SUCCESS: battery is running again. House power should be restored.");
         enterState(MONITORING);
@@ -288,12 +333,14 @@ void loop() {
         sendAlert("wake_failed", "FAILED: pressed the button but RUN did not come back. Waiting 5 minutes before retrying.");
         enterState(COOLDOWN);
       }
+
       break;
 
     case COOLDOWN:
       if (runOn || now - stateEnteredAt >= FAILED_WAKE_COOLDOWN_MS) {
         enterState(MONITORING);
       }
+
       break;
 
     case LOCKED_OUT:
@@ -304,6 +351,7 @@ void loop() {
         hourWindowStart = now;
         enterState(MONITORING);
       }
+
       break;
   }
 #endif
