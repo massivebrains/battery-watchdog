@@ -66,53 +66,53 @@ Servo servo;
 enum State { MONITORING, POST_PRESS, COOLDOWN, LOCKED_OUT };
 State state = MONITORING;
 
-unsigned long lastCheck = 0;
+unsigned long lastCheckTime = 0;
 unsigned long stateEnteredAt = 0;
-unsigned long almOnSince = 0;
-unsigned long lastAlmAlert = 0;
+unsigned long alarmOnSince = 0;
+unsigned long lastAlarmAlertTime = 0;
 unsigned long hourWindowStart = 0;
 int pressesThisHour = 0;
 int allOffStreak = 0;
 bool lastRunState = true;
 bool announcedShutdownPending = false;
 
-int readAvg(int pin) {
-  long sum = 0;
+int readAverage(int pin) {
+  long total = 0;
 
-  for (int i = 0; i < 10; i++) {
-    sum += analogRead(pin);
+  for (int sample = 0; sample < 10; sample++) {
+    total += analogRead(pin);
     delay(3);
   }
 
-  return sum / 10;
+  return total / 10;
 }
 
 bool ledOn(int pin, int threshold) {
-  int v = readAvg(pin);
-  return LIGHT_IS_LOW ? (v < threshold) : (v > threshold);
+  int reading = readAverage(pin);
+  return LIGHT_IS_LOW ? (reading < threshold) : (reading > threshold);
 }
 
-void urlEncode(const char* src, char* dst, size_t dstSize) {
-  const char* hex = "0123456789ABCDEF";
-  size_t j = 0;
+void urlEncode(const char* source, char* destination, size_t destinationSize) {
+  const char* hexDigits = "0123456789ABCDEF";
+  size_t writeIndex = 0;
 
-  for (size_t i = 0; src[i] != '\0' && j + 3 < dstSize; i++) {
-    char c = src[i];
+  for (size_t readIndex = 0; source[readIndex] != '\0' && writeIndex + 3 < destinationSize; readIndex++) {
+    char character = source[readIndex];
 
-    if (isalnum((unsigned char)c)) {
-      dst[j++] = c;
+    if (isalnum((unsigned char)character)) {
+      destination[writeIndex++] = character;
     } else {
-      dst[j++] = '%';
-      dst[j++] = hex[(c >> 4) & 0xF];
-      dst[j++] = hex[c & 0xF];
+      destination[writeIndex++] = '%';
+      destination[writeIndex++] = hexDigits[(character >> 4) & 0xF];
+      destination[writeIndex++] = hexDigits[character & 0xF];
     }
   }
 
-  dst[j] = '\0';
+  destination[writeIndex] = '\0';
 }
 
-void sendAlert(const char* event, const char* msg) {
-  Serial.printf("[ALERT] %s - %s\n", event, msg);
+void sendAlert(const char* event, const char* message) {
+  Serial.printf("[ALERT] %s - %s\n", event, message);
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[ALERT] no wifi, skipped");
@@ -127,18 +127,18 @@ void sendAlert(const char* event, const char* msg) {
     return;
   }
 
-  char eventEnc[64];
-  char msgEnc[512];
-  urlEncode(event, eventEnc, sizeof(eventEnc));
-  urlEncode(msg, msgEnc, sizeof(msgEnc));
+  char encodedEvent[64];
+  char encodedMessage[512];
+  urlEncode(event, encodedEvent, sizeof(encodedEvent));
+  urlEncode(message, encodedMessage, sizeof(encodedMessage));
 
   char request[768];
-  snprintf(request, sizeof(request), "GET /?event=%s&message=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", eventEnc, msgEnc, ALERT_HOST);
+  snprintf(request, sizeof(request), "GET /?event=%s&message=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", encodedEvent, encodedMessage, ALERT_HOST);
   client.print(request);
 
-  unsigned long t = millis();
+  unsigned long startTime = millis();
 
-  while (client.connected() && millis() - t < 5000) {
+  while (client.connected() && millis() - startTime < 5000) {
     if (client.available()) {
       client.readStringUntil('\n');
       break;
@@ -157,9 +157,9 @@ void ensureWifi() {
   WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  unsigned long t = millis();
+  unsigned long startTime = millis();
 
-  while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
+  while (WiFi.status() != WL_CONNECTED && millis() - startTime < 15000) {
     delay(250);
   }
 
@@ -196,8 +196,8 @@ bool pressBudgetAvailable() {
   return pressesThisHour < MAX_PRESSES_PER_HOUR;
 }
 
-void enterState(State s) {
-  state = s;
+void enterState(State newState) {
+  state = newState;
   stateEnteredAt = millis();
 }
 
@@ -217,9 +217,9 @@ void setup() {
 #else
   ensureWifi();
 
-  char msg[64];
-  snprintf(msg, sizeof(msg), "Battery watchdog started (%s mode)", MODE == MODE_DRY_RUN ? "DRY RUN" : "ACTIVE");
-  sendAlert("started", msg);
+  char message[64];
+  snprintf(message, sizeof(message), "Battery watchdog started (%s mode)", MODE == MODE_DRY_RUN ? "DRY RUN" : "ACTIVE");
+  sendAlert("started", message);
 
   hourWindowStart = millis();
   enterState(MONITORING);
@@ -228,7 +228,7 @@ void setup() {
 
 void loop() {
 #if MODE == MODE_CALIBRATE
-  Serial.printf("RUN=%4d  SOC=%4d  ALM=%4d\n", readAvg(PIN_RUN), readAvg(PIN_SOC), readAvg(PIN_ALM));
+  Serial.printf("RUN=%4d  SOC=%4d  ALM=%4d\n", readAverage(PIN_RUN), readAverage(PIN_SOC), readAverage(PIN_ALM));
 
   if (Serial.available()) {
     int angle = Serial.parseInt();
@@ -246,30 +246,30 @@ void loop() {
   delay(500);
 #else
 
-  if (millis() - lastCheck < CHECK_INTERVAL_MS) {
+  if (millis() - lastCheckTime < CHECK_INTERVAL_MS) {
     return;
   }
 
-  lastCheck = millis();
+  lastCheckTime = millis();
   ensureWifi();
 
   bool runOn = ledOn(PIN_RUN, THRESHOLD_RUN);
   bool socOn = ledOn(PIN_SOC, THRESHOLD_SOC);
-  bool almOn = ledOn(PIN_ALM, THRESHOLD_ALM);
+  bool alarmOn = ledOn(PIN_ALM, THRESHOLD_ALM);
   unsigned long now = millis();
 
-  Serial.printf("[%8lu] state=%d RUN=%d SOC=%d ALM=%d\n", now, state, runOn, socOn, almOn);
+  Serial.printf("[%8lu] state=%d RUN=%d SOC=%d ALM=%d\n", now, state, runOn, socOn, alarmOn);
 
   // ALM is normally on only ~3s at startup; longer means trouble
-  if (almOn) {
-    if (almOnSince == 0) {
-      almOnSince = now;
-    } else if (now - almOnSince > ALM_STUCK_MS && now - lastAlmAlert > ALM_ALERT_REPEAT_MS) {
+  if (alarmOn) {
+    if (alarmOnSince == 0) {
+      alarmOnSince = now;
+    } else if (now - alarmOnSince > ALM_STUCK_MS && now - lastAlarmAlertTime > ALM_ALERT_REPEAT_MS) {
       sendAlert("alarm_stuck", "WARNING: battery ALM light has stayed on for over a minute. Please check the battery.");
-      lastAlmAlert = now;
+      lastAlarmAlertTime = now;
     }
   } else {
-    almOnSince = 0;
+    alarmOnSince = 0;
   }
 
   if (runOn && !lastRunState && state == MONITORING) {
@@ -306,9 +306,9 @@ void loop() {
         announcedShutdownPending = false;
 
         if (!pressBudgetAvailable()) {
-          char msg[128];
-          snprintf(msg, sizeof(msg), "Battery is OFF but press limit reached (%d/hour). LOCKED OUT for safety - please check manually!", MAX_PRESSES_PER_HOUR);
-          sendAlert("locked_out", msg);
+          char message[128];
+          snprintf(message, sizeof(message), "Battery is OFF but press limit reached (%d/hour). LOCKED OUT for safety - please check manually!", MAX_PRESSES_PER_HOUR);
+          sendAlert("locked_out", message);
           enterState(LOCKED_OUT);
           break;
         }
