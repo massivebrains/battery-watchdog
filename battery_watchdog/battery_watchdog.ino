@@ -3,7 +3,7 @@
  * ESP32 + 2x LM393 LDR modules + SG90 servo
  *
  * Watches the Growatt battery panel LEDs. When the battery shuts off
- * (RUN off AND SOC off), the servo presses the power button once and
+ * (RUN off AND battery level lights off), the servo presses the power button once and
  * verifies the battery came back. Alerts go to your server as:
  *   POST https://vast-comet-94.webhook.cool/  {"event":"<code>","message":"<text>"}
  *
@@ -32,7 +32,7 @@ const char* ALERT_HOST = "vast-comet-94.webhook.cool";
 
 // ---------- Pins (ADC1 only: 32-39 work with WiFi on) ----------
 const int PIN_RUN = 34;
-const int PIN_SOC = 35;
+const int PIN_BATTERY = 35;
 const int PIN_SERVO = 18;
 
 // ---------- Sensor calibration ----------
@@ -58,6 +58,17 @@ Servo servo;
 
 enum State { MONITORING, POST_PRESS, COOLDOWN, LOCKED_OUT };
 State state = MONITORING;
+
+const char* stateName(State value) {
+  switch (value) {
+    case MONITORING: return "MONITORING";
+    case POST_PRESS: return "POST_PRESS";
+    case COOLDOWN: return "COOLDOWN";
+    case LOCKED_OUT: return "LOCKED_OUT";
+  }
+
+  return "UNKNOWN";
+}
 
 unsigned long lastCheckTime = 0;
 unsigned long stateEnteredAt = 0;
@@ -175,7 +186,7 @@ void setup() {
   delay(500);
   analogReadResolution(12);
   pinMode(PIN_RUN, INPUT);
-  pinMode(PIN_SOC, INPUT);
+  pinMode(PIN_BATTERY, INPUT);
 
 #if MODE == MODE_CALIBRATE
   Serial.println("\n=== CALIBRATION MODE ===");
@@ -196,7 +207,7 @@ void setup() {
 
 void loop() {
 #if MODE == MODE_CALIBRATE
-  Serial.printf("RUN=%4d  SOC=%4d\n", readAverage(PIN_RUN), readAverage(PIN_SOC));
+  Serial.printf("RUN=%4d  BATTERY=%4d\n", readAverage(PIN_RUN), readAverage(PIN_BATTERY));
 
   if (Serial.available()) {
     int angle = Serial.parseInt();
@@ -222,10 +233,10 @@ void loop() {
   ensureWifi();
 
   bool runOn = ledOn(PIN_RUN);
-  bool socOn = ledOn(PIN_SOC);
+  bool batteryOn = ledOn(PIN_BATTERY);
   unsigned long now = millis();
 
-  Serial.printf("[%8lu] state=%d RUN=%d SOC=%d\n", now, state, runOn, socOn);
+  Serial.printf("[%8lu] state=%s RUN=%d BATTERY=%d\n", now, stateName(state), runOn, batteryOn);
 
   if (runOn && !lastRunState && state == MONITORING) {
     sendAlert("run_restored", "Battery RUN light is back on.");
@@ -242,12 +253,12 @@ void loop() {
         break;
       }
 
-      if (socOn) {
-        // RUN off but SOC still lit: shutdown in progress, wait for all off
+      if (batteryOn) {
+        // RUN off but battery lights still lit: shutdown in progress, wait for all off
         allOffStreak = 0;
 
         if (!announcedShutdownPending) {
-          sendAlert("shutdown_pending", "Battery RUN light went OFF (SOC lights still on). Waiting for full shutdown before pressing.");
+          sendAlert("shutdown_pending", "Battery RUN light went OFF (battery level lights still on). Waiting for full shutdown before pressing.");
           announcedShutdownPending = true;
         }
 
