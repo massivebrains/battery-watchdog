@@ -5,7 +5,7 @@
  * Watches the Growatt battery panel LEDs. When the battery shuts off
  * (RUN off AND SOC off), the servo presses the power button once and
  * verifies the battery came back. Alerts go to your server as:
- *   GET https://vast-comet-94.webhook.cool/?event=<code>&message=<text>
+ *   POST https://vast-comet-94.webhook.cool/  {"event":"<code>","message":"<text>"}
  *
  * Board: ESP32 Dev Module | Library: ESP32Servo
  *
@@ -87,25 +87,6 @@ bool ledOn(int pin) {
   return LED_THRESHOLD > readAverage(pin);
 }
 
-void urlEncode(const char* source, char* destination, size_t destinationSize) {
-  const char* hexDigits = "0123456789ABCDEF";
-  size_t writeIndex = 0;
-
-  for (size_t readIndex = 0; source[readIndex] != '\0' && writeIndex + 3 < destinationSize; readIndex++) {
-    char character = source[readIndex];
-
-    if (isalnum((unsigned char)character)) {
-      destination[writeIndex++] = character;
-    } else {
-      destination[writeIndex++] = '%';
-      destination[writeIndex++] = hexDigits[(character >> 4) & 0xF];
-      destination[writeIndex++] = hexDigits[character & 0xF];
-    }
-  }
-
-  destination[writeIndex] = '\0';
-}
-
 void sendAlert(const char* event, const char* message) {
   Serial.printf("[ALERT] %s - %s\n", event, message);
 
@@ -122,13 +103,11 @@ void sendAlert(const char* event, const char* message) {
     return;
   }
 
-  char encodedEvent[64];
-  char encodedMessage[512];
-  urlEncode(event, encodedEvent, sizeof(encodedEvent));
-  urlEncode(message, encodedMessage, sizeof(encodedMessage));
+  char body[600];
+  snprintf(body, sizeof(body), "{\"event\":\"%s\",\"message\":\"%s\"}", event, message);
 
   char request[768];
-  snprintf(request, sizeof(request), "GET /?event=%s&message=%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", encodedEvent, encodedMessage, ALERT_HOST);
+  snprintf(request, sizeof(request), "POST / HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", ALERT_HOST, (int)strlen(body), body);
   client.print(request);
 
   unsigned long startTime = millis();
