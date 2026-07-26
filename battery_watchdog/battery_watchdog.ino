@@ -37,13 +37,9 @@ const int PIN_ALM = 32;
 const int PIN_SERVO = 18;
 
 // ---------- Sensor calibration ----------
-// Run MODE_CALIBRATE, note values (0-4095) with each LED on vs off,
-// set thresholds halfway between. Most LM393 modules read LOWER with
-// more light; if yours reads higher, set LIGHT_IS_LOW to false.
-const bool LIGHT_IS_LOW = true;
-int THRESHOLD_RUN = 2000;
-int THRESHOLD_SOC = 2000;
-int THRESHOLD_ALM = 2000;
+// These modules read LOWER with more light.
+// Calibrated 2026-07: LED on reads < 2000, LED off reads 3600-4000.
+const int LED_THRESHOLD = 2800;
 
 // ---------- Servo calibration ----------
 int SERVO_REST_ANGLE = 20;
@@ -87,9 +83,8 @@ int readAverage(int pin) {
   return total / 10;
 }
 
-bool ledOn(int pin, int threshold) {
-  int reading = readAverage(pin);
-  return LIGHT_IS_LOW ? (reading < threshold) : (reading > threshold);
+bool ledOn(int pin) {
+  return LED_THRESHOLD > readAverage(pin);
 }
 
 void urlEncode(const char* source, char* destination, size_t destinationSize) {
@@ -253,9 +248,9 @@ void loop() {
   lastCheckTime = millis();
   ensureWifi();
 
-  bool runOn = ledOn(PIN_RUN, THRESHOLD_RUN);
-  bool socOn = ledOn(PIN_SOC, THRESHOLD_SOC);
-  bool alarmOn = ledOn(PIN_ALM, THRESHOLD_ALM);
+  bool runOn = ledOn(PIN_RUN);
+  bool socOn = ledOn(PIN_SOC);
+  bool alarmOn = ledOn(PIN_ALM);
   unsigned long now = millis();
 
   Serial.printf("[%8lu] state=%d RUN=%d SOC=%d ALM=%d\n", now, state, runOn, socOn, alarmOn);
