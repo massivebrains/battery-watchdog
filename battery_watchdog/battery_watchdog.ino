@@ -1,6 +1,6 @@
 /*
  * BATTERY WATCHDOG v1.1
- * ESP32 + 3x LM393 LDR modules + SG90 servo
+ * ESP32 + 2x LM393 LDR modules + SG90 servo
  *
  * Watches the Growatt battery panel LEDs. When the battery shuts off
  * (RUN off AND SOC off), the servo presses the power button once and
@@ -33,7 +33,6 @@ const char* ALERT_HOST = "vast-comet-94.webhook.cool";
 // ---------- Pins (ADC1 only: 32-39 work with WiFi on) ----------
 const int PIN_RUN = 34;
 const int PIN_SOC = 35;
-const int PIN_ALM = 32;
 const int PIN_SERVO = 18;
 
 // ---------- Sensor calibration ----------
@@ -52,8 +51,6 @@ const int STABLE_CHECKS_REQUIRED = 8; // 8 x 2s = 16s of "all off" before pressi
 const unsigned long POST_PRESS_WAIT_MS = 45000;
 const int MAX_PRESSES_PER_HOUR = 3;
 const unsigned long FAILED_WAKE_COOLDOWN_MS = 5UL * 60 * 1000;
-const unsigned long ALM_STUCK_MS = 60000;
-const unsigned long ALM_ALERT_REPEAT_MS = 30UL * 60 * 1000;
 
 // ============================================================
 
@@ -64,8 +61,6 @@ State state = MONITORING;
 
 unsigned long lastCheckTime = 0;
 unsigned long stateEnteredAt = 0;
-unsigned long alarmOnSince = 0;
-unsigned long lastAlarmAlertTime = 0;
 unsigned long hourWindowStart = 0;
 int pressesThisHour = 0;
 int allOffStreak = 0;
@@ -181,7 +176,6 @@ void setup() {
   analogReadResolution(12);
   pinMode(PIN_RUN, INPUT);
   pinMode(PIN_SOC, INPUT);
-  pinMode(PIN_ALM, INPUT);
 
 #if MODE == MODE_CALIBRATE
   Serial.println("\n=== CALIBRATION MODE ===");
@@ -202,7 +196,7 @@ void setup() {
 
 void loop() {
 #if MODE == MODE_CALIBRATE
-  Serial.printf("RUN=%4d  SOC=%4d  ALM=%4d\n", readAverage(PIN_RUN), readAverage(PIN_SOC), readAverage(PIN_ALM));
+  Serial.printf("RUN=%4d  SOC=%4d\n", readAverage(PIN_RUN), readAverage(PIN_SOC));
 
   if (Serial.available()) {
     int angle = Serial.parseInt();
@@ -229,22 +223,9 @@ void loop() {
 
   bool runOn = ledOn(PIN_RUN);
   bool socOn = ledOn(PIN_SOC);
-  bool alarmOn = ledOn(PIN_ALM);
   unsigned long now = millis();
 
-  Serial.printf("[%8lu] state=%d RUN=%d SOC=%d ALM=%d\n", now, state, runOn, socOn, alarmOn);
-
-  // ALM is normally on only ~3s at startup; longer means trouble
-  if (alarmOn) {
-    if (alarmOnSince == 0) {
-      alarmOnSince = now;
-    } else if (now - alarmOnSince > ALM_STUCK_MS && now - lastAlarmAlertTime > ALM_ALERT_REPEAT_MS) {
-      sendAlert("alarm_stuck", "WARNING: battery ALM light has stayed on for over a minute. Please check the battery.");
-      lastAlarmAlertTime = now;
-    }
-  } else {
-    alarmOnSince = 0;
-  }
+  Serial.printf("[%8lu] state=%d RUN=%d SOC=%d\n", now, state, runOn, socOn);
 
   if (runOn && !lastRunState && state == MONITORING) {
     sendAlert("run_restored", "Battery RUN light is back on.");
