@@ -23,12 +23,12 @@
 #define MODE_DRY_RUN 1
 #define MODE_ACTIVE 2
 
-#define MODE MODE_CALIBRATE // <-- change as you progress
+#define MODE MODE_DRY_RUN // <-- change as you progress
 
 // ---------- WiFi + alerts ----------
-const char* WIFI_SSID = "YOUR_WIFI_NAME";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-const char* ALERT_HOST = "vast-comet-94.webhook.cool"; // GET /?event=..&message=..
+const char* WIFI_SSID = "Flat_2";
+const char* WIFI_PASSWORD = "08175020329";
+const char* ALERT_HOST = "vast-comet-94.webhook.cool";
 
 // ---------- Pins (ADC1 only: 32-39 work with WiFi on) ----------
 const int PIN_RUN = 34;
@@ -42,8 +42,8 @@ const int PIN_SERVO = 18;
 const int LED_THRESHOLD = 2800;
 
 // ---------- Servo calibration ----------
-int SERVO_REST_ANGLE = 20;
-int SERVO_PRESS_ANGLE = 70;
+int SERVO_REST_ANGLE = 0;
+int SERVO_PRESS_ANGLE = 32;
 const unsigned long PRESS_HOLD_MS = 600;
 
 // ---------- Timing & safety ----------
