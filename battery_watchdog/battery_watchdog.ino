@@ -23,7 +23,7 @@
 #define MODE_DRY_RUN 1
 #define MODE_ACTIVE 2
 
-#define MODE MODE_CALIBRATE // <-- change as you progress
+#define MODE MODE_ACTIVE // <-- change as you progress
 
 // ---------- WiFi + alerts ----------
 const char* WIFI_SSID = "Flat_2";
@@ -39,7 +39,7 @@ const int PIN_SERVO = 18;
 // ---------- Sensor calibration ----------
 // These modules read LOWER with more light.
 // Calibrated 2026-07: LED on reads < 2000, LED off reads 3600-4000.
-const int LED_THRESHOLD = 2800;
+const int LED_THRESHOLD = 3100;
 
 // ---------- Servo calibration ----------
 int SERVO_REST_ANGLE = 0;
