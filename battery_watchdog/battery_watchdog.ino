@@ -230,7 +230,12 @@ void setup() {
 
 void loop() {
 #if MODE == MODE_CALIBRATE
-  Serial.printf("RUN=%4d  BATTERY=%4d\n", readAverage(PIN_RUN), readAverage(PIN_BATTERY));
+  bool runOn = ledOn(PIN_RUN);
+  bool batteryOn = ledOn(PIN_BATTERY);
+
+  char countdown[64];
+  describeCountdown(countdown, sizeof(countdown), runOn, batteryOn);
+  Serial.printf("[%8lu] state=%s RUN=%d BATTERY=%d -> %s\n", millis(), stateName(state), runOn, batteryOn, countdown);
 
   if (Serial.available()) {
     int angle = Serial.parseInt();
