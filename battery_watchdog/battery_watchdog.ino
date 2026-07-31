@@ -23,7 +23,7 @@
 #define MODE_DRY_RUN 1
 #define MODE_ACTIVE 2
 
-#define MODE MODE_DRY_RUN // <-- change as you progress
+#define MODE MODE_CALIBRATE // <-- change as you progress
 
 // ---------- WiFi + alerts ----------
 const char* WIFI_SSID = "Flat_2";
