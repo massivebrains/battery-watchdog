@@ -181,6 +181,29 @@ void enterState(State newState) {
   stateEnteredAt = millis();
 }
 
+void describeCountdown(char* out, size_t len, bool runOn, bool batteryOn) {
+  long elapsed = (long)(millis() - stateEnteredAt);
+
+  switch (state) {
+    case MONITORING:
+      if (runOn || batteryOn) {
+        snprintf(out, len, "waiting for shutdown");
+      } else {
+        snprintf(out, len, "press in %lds (streak %d/%d)", (long)(STABLE_CHECKS_REQUIRED - allOffStreak) * CHECK_INTERVAL_MS / 1000, allOffStreak, STABLE_CHECKS_REQUIRED);
+      }
+      break;
+    case POST_PRESS:
+      snprintf(out, len, "verify wake in %lds", ((long)POST_PRESS_WAIT_MS - elapsed) / 1000);
+      break;
+    case COOLDOWN:
+      snprintf(out, len, "retry in %lds", ((long)FAILED_WAKE_COOLDOWN_MS - elapsed) / 1000);
+      break;
+    case LOCKED_OUT:
+      snprintf(out, len, "waiting for RUN to return");
+      break;
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -236,7 +259,9 @@ void loop() {
   bool batteryOn = ledOn(PIN_BATTERY);
   unsigned long now = millis();
 
-  Serial.printf("[%8lu] state=%s RUN=%d BATTERY=%d\n", now, stateName(state), runOn, batteryOn);
+  char countdown[64];
+  describeCountdown(countdown, sizeof(countdown), runOn, batteryOn);
+  Serial.printf("[%8lu] state=%s RUN=%d BATTERY=%d -> %s\n", now, stateName(state), runOn, batteryOn, countdown);
 
   if (runOn && !lastRunState && state == MONITORING) {
     sendAlert("run_restored", "Battery RUN light is back on.");
