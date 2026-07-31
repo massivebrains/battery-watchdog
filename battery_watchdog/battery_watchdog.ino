@@ -28,7 +28,8 @@
 // ---------- WiFi + alerts ----------
 const char* WIFI_SSID = "Flat_2";
 const char* WIFI_PASSWORD = "08175020329";
-const char* ALERT_HOST = "vast-comet-94.webhook.cool";
+const char* ALERT_HOST = "brass.trymassive.ai";
+const char* ALERT_PATH = "/api/inverter";
 
 // ---------- Pins (ADC1 only: 32-39 work with WiFi on) ----------
 const int PIN_RUN = 34;
@@ -114,7 +115,7 @@ void sendAlert(const char* event, const char* message) {
   snprintf(body, sizeof(body), "{\"event\":\"%s\",\"message\":\"%s\"}", event, message);
 
   char request[768];
-  snprintf(request, sizeof(request), "POST / HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", ALERT_HOST, (int)strlen(body), body);
+  snprintf(request, sizeof(request), "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", ALERT_PATH, ALERT_HOST, (int)strlen(body), body);
   client.print(request);
 
   unsigned long startTime = millis();
