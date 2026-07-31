@@ -230,12 +230,14 @@ void setup() {
 
 void loop() {
 #if MODE == MODE_CALIBRATE
-  bool runOn = ledOn(PIN_RUN);
-  bool batteryOn = ledOn(PIN_BATTERY);
+  int runValue = readAverage(PIN_RUN);
+  int batteryValue = readAverage(PIN_BATTERY);
+  bool runOn = LED_THRESHOLD > runValue;
+  bool batteryOn = LED_THRESHOLD > batteryValue;
 
   char countdown[64];
   describeCountdown(countdown, sizeof(countdown), runOn, batteryOn);
-  Serial.printf("[%8lu] state=%s RUN=%d BATTERY=%d -> %s\n", millis(), stateName(state), runOn, batteryOn, countdown);
+  Serial.printf("[%8lu] state=%s RUN=%d(%d) BATTERY=%d(%d) -> %s\n", millis(), stateName(state), runOn, runValue, batteryOn, batteryValue, countdown);
 
   if (Serial.available()) {
     int angle = Serial.parseInt();
