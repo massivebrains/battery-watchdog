@@ -75,6 +75,7 @@ unsigned long stateEnteredAt = 0;
 unsigned long hourWindowStart = 0;
 int pressesThisHour = 0;
 int allOffStreak = 0;
+unsigned long allOffSince = 0;
 bool lastRunState = true;
 bool announcedShutdownPending = false;
 
@@ -179,24 +180,35 @@ bool pressBudgetAvailable() {
 void enterState(State newState) {
   state = newState;
   stateEnteredAt = millis();
+  allOffSince = 0;
+}
+
+long remainingSeconds(long totalMs, long elapsedMs) {
+  long remaining = (totalMs - elapsedMs) / 1000;
+  return remaining < 0 ? 0 : remaining;
 }
 
 void describeCountdown(char* out, size_t len, bool runOn, bool batteryOn) {
-  long elapsed = (long)(millis() - stateEnteredAt);
+  unsigned long now = millis();
+  long elapsed = (long)(now - stateEnteredAt);
 
   switch (state) {
     case MONITORING:
       if (runOn || batteryOn) {
+        allOffSince = 0;
         snprintf(out, len, "waiting for shutdown");
       } else {
-        snprintf(out, len, "press in %lds (streak %d/%d)", (long)(STABLE_CHECKS_REQUIRED - allOffStreak) * CHECK_INTERVAL_MS / 1000, allOffStreak, STABLE_CHECKS_REQUIRED);
+        if (allOffSince == 0) {
+          allOffSince = now;
+        }
+        snprintf(out, len, "press in %lds", remainingSeconds((long)STABLE_CHECKS_REQUIRED * CHECK_INTERVAL_MS, (long)(now - allOffSince)));
       }
       break;
     case POST_PRESS:
-      snprintf(out, len, "verify wake in %lds", ((long)POST_PRESS_WAIT_MS - elapsed) / 1000);
+      snprintf(out, len, "verify wake in %lds", remainingSeconds((long)POST_PRESS_WAIT_MS, elapsed));
       break;
     case COOLDOWN:
-      snprintf(out, len, "retry in %lds", ((long)FAILED_WAKE_COOLDOWN_MS - elapsed) / 1000);
+      snprintf(out, len, "retry in %lds", remainingSeconds((long)FAILED_WAKE_COOLDOWN_MS, elapsed));
       break;
     case LOCKED_OUT:
       snprintf(out, len, "waiting for RUN to return");
