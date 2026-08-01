@@ -48,7 +48,7 @@ const unsigned long PRESS_HOLD_MS = 600;
 
 // ---------- Timing & safety ----------
 const unsigned long CHECK_INTERVAL_MS = 2000;
-const int STABLE_CHECKS_REQUIRED = 5; // 5 x 2s = 10s of "all off" before pressing
+const int STABLE_CHECKS_REQUIRED = 3; // 3 x 2s = 6s of "all off" before pressing
 const unsigned long POST_PRESS_WAIT_MS = 15000;
 const int MAX_PRESSES_PER_HOUR = 3;
 const unsigned long FAILED_WAKE_COOLDOWN_MS = 5UL * 60 * 1000;
