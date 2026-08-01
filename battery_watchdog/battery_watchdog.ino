@@ -340,8 +340,11 @@ void loop() {
       if (runOn) {
         sendAlert("wake_success", "SUCCESS: battery is running again. House power should be restored.");
         enterState(MONITORING);
+      } else if (batteryOn) {
+        sendAlert("partial_wakeup", "PARTIAL: battery level lights came on but RUN did not. Not retrying.");
+        enterState(MONITORING);
       } else {
-        sendAlert("wake_failed", "FAILED: pressed the button but RUN did not come back. Waiting 5 minutes before retrying.");
+        sendAlert("wake_failed", "FAILED: pressed the button but RUN and battery did not come back. Waiting 5 minutes before retrying.");
         enterState(COOLDOWN);
       }
 
